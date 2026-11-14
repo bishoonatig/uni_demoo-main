@@ -1,0 +1,23 @@
+# Campus timetable generator
+
+This project uses PostgreSQL to store the university data and Google OR-Tools CP-SAT to generate a timetable. The solver prevents instructor, room, and student-group conflicts, caps each instructor and group at four sessions per day, requires at least three different courses on each non-Friday day a student group attends when that group has at least three courses per week, schedules sessions without gaps, and gives each group at least two days off per week. Groups with fewer than three courses per week can still be scheduled, with their remaining days off. Groups with the same group number in the same academic term are treated as the same students across courses. The solver stops after ten seconds if it cannot find a valid timetable.
+
+Offline lectures assigned to seconded instructors are scheduled on Friday whenever possible, with Saturday used only when needed. They occupy two consecutive periods and are shown in both; they are marked as every other week. Online lectures taught by seconded instructors can be scheduled on any day.
+
+## Setup
+
+1. Create a PostgreSQL database.
+2. Run `02_timetable_schema.sql` against it. This is the schema for `university-erd.md`; `01_create_database.sql` contains a different, older set of tables and is not used by this app.
+   If the database already exists, run the schema script again to add the latest columns. Saved schedules from older rule versions are hidden until regenerated.
+3. Install the Python packages with `python -m pip install -r requirements.txt`.
+4. Copy `.env.example` to `.env` and replace the sample connection values with your PostgreSQL host, port, database name, username, and password. Keep `.env` private; it is excluded from Git.
+
+5. Restart the app with `python -m uvicorn app:app --reload` and open `http://127.0.0.1:8000`.
+
+## Entering data
+
+Add departments and academic terms first, then instructors, courses, cohorts, rooms, the weekly schedule, and course offerings. Instructor selection on an offering is optional; unassigned offerings are shown as `Not assigned` and can be edited later. Their sessions are generated without an instructor and are not available on Fridays until an instructor is assigned. Enter the day start/end once; the app creates six 100-minute periods with 20-minute breaks for every day. Friday periods are available only to instructors marked as seconded. Select one or more teaching types for each instructor. A course offering contains one activity multi-select; its sessions are derived automatically: one lecture per pair of groups, one section per group, and one lab per group when selected. Every student group receives each of those activities. Adding the same course again assigns another instructor; when more than one instructor is listed for the same activity, generation keeps one instructor for it. Select `Lecture is online` to schedule lectures without a room; sections and labs remain in-person. Adding a cohort needs its total student count; the app creates groups of at most 20 students and labels them `a`, `b`, `c`, and onward. Existing cohorts have a `Generate missing groups` action that adds only the students not yet assigned to groups. Set room types to `LECTURE`, `SECTION`, or `LAB`. The day number uses Monday = 1 through Sunday = 7.
+
+Friday is unavailable to instructors who are not marked as seconded during automatic generation. The timetable shows each assigned instructor's name, including `Not assigned` when a session has no instructor. Use a session's `Edit` action to manually change its instructor, period, or room without applying generation rules such as Friday availability, seconded-instructor day restrictions, room type, or room capacity. Manual edits and swaps are still rejected if they create an overlapping instructor, room, or student-group assignment. Rooms can also be added to online sessions or cleared from in-person sessions manually. These changes apply only to the saved timetable and are replaced if it is generated again.
+
+Generating a term replaces its existing rows in `timetable_sessions` and `session_groups`. Make sure the input records and time slots are complete before generating.
